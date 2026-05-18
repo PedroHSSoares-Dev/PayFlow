@@ -1,131 +1,195 @@
-# PayFlow Dashboard — Docker Compose
+# PayFlow Dashboard
 
-Dashboard de plataforma de pagamentos para e-commerce construído com **React + PostgreSQL**, empacotado em dois containers Docker orquestrados com Docker Compose.
+Dashboard de monitoramento de pagamentos para e-commerce, desenvolvido como projeto acadêmico de **Cloud Computing e Containers** na FIAP.
+
+A aplicação é composta por dois containers orquestrados com Docker Compose: um frontend React servido pelo nginx, e um banco de dados PostgreSQL com dados de transações.
 
 ---
 
-## Estrutura do Projeto
+## O que a aplicação faz
 
-```
-.
-├── docker-compose.yml          # Orquestração dos dois containers
-├── .env.example                # Template de variáveis de ambiente
-├── README.md
-│
-├── db/
-│   └── init.sql                # Criação da tabela + 15 registros de exemplo
-│
-└── frontend/
-    ├── Dockerfile              # Build multi-stage: Node.js → nginx
-    ├── nginx.conf              # Configuração nginx com SPA mode
-    ├── package.json
-    ├── vite.config.js
-    ├── index.html
-    └── src/
-        ├── main.jsx
-        ├── App.jsx
-        ├── index.css
-        ├── data/
-        │   └── transactions.js   # 15 transações mockadas em R$
-        └── components/
-            ├── Header.jsx        # Logo + status de conexão com DB
-            ├── KPICards.jsx      # 4 cards de métricas
-            ├── TransactionsTable.jsx
-            └── PaymentChart.jsx  # Gráfico de barras CSS-only
-```
+A dashboard exibe métricas e transações de uma plataforma de pagamentos fictícia. Ao acessar `http://localhost`, você verá:
+
+- **Header** com o logo PayFlow e um indicador de status de conexão com o banco (bolinha verde animada)
+- **4 KPI Cards** calculados em tempo real a partir dos dados: total de transações, volume em R$, taxa de aprovação (%) e ticket médio
+- **Tabela de transações** com ID, cliente, valor, status (Aprovado / Recusado / Pendente), método de pagamento (Pix / Cartão / Boleto) e data
+- **Gráfico de barras** mostrando o volume por método de pagamento — construído puramente com CSS, sem nenhuma biblioteca de charts
+
+Os dados são mockados diretamente no React (15 transações realistas em R$) e espelhados no banco PostgreSQL via script de inicialização.
 
 ---
 
 ## Arquitetura
 
 ```
-┌───────────────────────────────────────────────────┐
-│              payflow-network  (bridge)            │
-│                                                   │
-│  ┌──────────────────────┐  ┌────────────────────┐ │
-│  │  frontend            │  │  db                │ │
-│  │  nginx:alpine        │  │  postgres:15-alpine│ │
-│  │  porta 80 → :80      │  │  porta 5432        │ │
-│  │                      │  │  (somente interno) │ │
-│  │  depends_on: db      │  │  volume nomeado    │ │
-│  │  (service_healthy)   │  │  healthcheck:      │ │
-│  │                      │  │  pg_isready        │ │
-│  └──────────────────────┘  └────────────────────┘ │
-└───────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│                 payflow-network (bridge)              │
+│                                                      │
+│   ┌─────────────────────┐   ┌──────────────────────┐ │
+│   │     frontend         │   │         db           │ │
+│   │                      │   │                      │ │
+│   │  nginx:alpine        │   │  postgres:15-alpine  │ │
+│   │  porta 80 → :80      │   │  porta 5432          │ │
+│   │                      │   │  (só interna)        │ │
+│   │  React (Vite build)  │   │  volume nomeado      │ │
+│   │  estáticos em /html  │   │  healthcheck:        │ │
+│   │                      │   │  pg_isready          │ │
+│   │  depends_on: db ✓    │   │                      │ │
+│   └─────────────────────┘   └──────────────────────┘ │
+└──────────────────────────────────────────────────────┘
+```
+
+O container `frontend` só sobe depois que o `db` passa no healthcheck (`pg_isready`), garantindo que o banco esteja pronto antes da aplicação iniciar.
+
+---
+
+## Estrutura do projeto
+
+```
+PayFlow/
+├── docker-compose.yml            # Orquestração dos dois containers
+├── .env.example                  # Template de variáveis de ambiente
+│
+├── db/
+│   └── init.sql                  # Cria a tabela e insere os 15 registros
+│
+└── frontend/
+    ├── Dockerfile                # Build multi-stage (Node → nginx)
+    ├── nginx.conf                # SPA mode, gzip, cache de assets
+    ├── package.json
+    ├── vite.config.js
+    ├── index.html
+    └── src/
+        ├── main.jsx
+        ├── App.jsx               # Componente raiz
+        ├── index.css             # Design tokens e reset global
+        ├── data/
+        │   └── transactions.js   # 15 transações mockadas
+        └── components/
+            ├── Header.jsx        # Logo + status de conexão
+            ├── KPICards.jsx      # 4 métricas principais
+            ├── TransactionsTable.jsx
+            └── PaymentChart.jsx  # Gráfico CSS-only (sem biblioteca)
 ```
 
 ---
 
-## Comandos Utilizados
+## Container 1 — Frontend
 
-### 1. Rodar localmente com Docker Compose
+O Dockerfile usa **build multi-stage** para manter a imagem final pequena:
+
+**Stage 1 — Build (`node:20-alpine`)**
+Instala as dependências e executa `npm run build`, gerando os arquivos estáticos otimizados na pasta `dist/`. As variáveis de ambiente do Vite (`VITE_DB_HOST`, `VITE_APP_ENV`, `VITE_APP_TITLE`) são injetadas neste momento via `ARG`/`ENV`, pois o Vite as embute no bundle durante o build — elas não existem em runtime.
+
+**Stage 2 — Serve (`nginx:alpine`)**
+Copia apenas a pasta `dist/` do stage anterior e a configuração do nginx. O resultado é uma imagem enxuta, sem Node.js nem código-fonte.
+
+O `nginx.conf` está configurado para **SPA mode**: qualquer rota que não seja um arquivo estático é redirecionada para `index.html`, permitindo que o React Router (ou navegação futura) funcione corretamente.
+
+```nginx
+location / {
+    try_files $uri $uri/ /index.html;
+}
+```
+
+---
+
+## Container 2 — Banco de dados
+
+Usa a imagem oficial `postgres:15-alpine`. Na primeira vez que o container sobe, o PostgreSQL executa automaticamente qualquer script em `/docker-entrypoint-initdb.d/` — é assim que o `db/init.sql` é carregado.
+
+O script cria a tabela `transactions`:
+
+```sql
+CREATE TABLE transactions (
+    id             SERIAL PRIMARY KEY,
+    customer_name  VARCHAR(100),
+    amount         NUMERIC(10, 2),
+    status         VARCHAR(20),   -- 'Aprovado' | 'Recusado' | 'Pendente'
+    payment_method VARCHAR(20),   -- 'Pix' | 'Cartão' | 'Boleto'
+    created_at     TIMESTAMP
+);
+```
+
+O volume nomeado `postgres_data` garante que os dados persistam mesmo que o container seja recriado. A porta 5432 **não é exposta** para o host — o banco só é acessível de dentro da rede `payflow-network`.
+
+---
+
+## Como rodar localmente
+
+**Pré-requisitos:** Docker e Docker Compose instalados.
 
 ```bash
-# 1. Copiar as variáveis de ambiente
+# 1. Clonar o repositório
+git clone https://github.com/PedroHSSoares-Dev/PayFlow.git
+cd PayFlow
+
+# 2. Copiar as variáveis de ambiente
 cp .env.example .env
 
-# 2. Subir os dois containers com build
+# 3. Subir os containers com build
 docker compose up --build
+```
 
-# Alternativa: rodar em background (modo detached)
+Acesse em: **http://localhost**
+
+```bash
+# Rodar em background
 docker compose up --build -d
 
-# Acompanhar os logs em tempo real
+# Ver logs em tempo real
 docker compose logs -f
 
-# Ver status dos containers
-docker compose ps
-
-# Parar os containers (mantém volumes)
+# Parar (mantém o volume do banco)
 docker compose down
 
-# Parar e remover TUDO (incluindo volume do banco)
+# Parar e apagar tudo, incluindo o banco
 docker compose down -v
 ```
 
-> Acesse a dashboard em: **http://localhost**
+---
+
+## Variáveis de ambiente
+
+Todas as variáveis ficam no arquivo `.env` (copiado do `.env.example`):
+
+| Variável | Usado por | Descrição |
+|---|---|---|
+| `POSTGRES_USER` | Container `db` | Usuário do PostgreSQL |
+| `POSTGRES_PASSWORD` | Container `db` | Senha do PostgreSQL |
+| `POSTGRES_DB` | Container `db` | Nome do banco de dados |
+| `VITE_DB_HOST` | Build do frontend | Host do banco exibido no header |
+| `VITE_APP_ENV` | Build do frontend | Ambiente (`production`, `development`) |
+| `VITE_APP_TITLE` | Build do frontend | Título exibido na dashboard |
+
+> As variáveis `VITE_*` são **build args** — elas são lidas pelo Vite na hora do build e embutidas no JavaScript. Alterar o `.env` depois do build não tem efeito; é necessário rebuildar com `docker compose up --build`.
 
 ---
 
-### 2. Criar Resource Group e ACR na Azure (az cli)
+## Deploy na Azure
+
+### Criar Resource Group e Container Registry (ACR)
 
 ```bash
-# Definir variáveis
 RESOURCE_GROUP="rg-payflow"
 LOCATION="eastus"
-ACR_NAME="acrpayflow$RANDOM"   # nome único globalmente (sem hifens)
+ACR_NAME="acrpayflow$RANDOM"
 
-# Autenticar na Azure
 az login
+az group create --name $RESOURCE_GROUP --location $LOCATION
 
-# Criar o Resource Group
-az group create \
-  --name $RESOURCE_GROUP \
-  --location $LOCATION
-
-# Criar o Azure Container Registry (SKU Basic)
 az acr create \
   --resource-group $RESOURCE_GROUP \
   --name $ACR_NAME \
   --sku Basic \
   --admin-enabled true
-
-# Exibir o login server do ACR criado
-az acr show \
-  --name $ACR_NAME \
-  --query loginServer \
-  --output tsv
 ```
 
----
-
-### 3. Build e push da imagem frontend para o ACR
+### Build e push da imagem para o ACR
 
 ```bash
-# Login no ACR via Azure CLI
 az acr login --name $ACR_NAME
 
-# Build da imagem com os build args do Vite
 docker build \
   --build-arg VITE_DB_HOST=db \
   --build-arg VITE_APP_ENV=production \
@@ -133,31 +197,16 @@ docker build \
   -t $ACR_NAME.azurecr.io/payflow-frontend:latest \
   ./frontend
 
-# Push para o ACR
 docker push $ACR_NAME.azurecr.io/payflow-frontend:latest
-
-# Verificar que a imagem chegou ao ACR
-az acr repository list \
-  --name $ACR_NAME \
-  --output table
-
-az acr repository show-tags \
-  --name $ACR_NAME \
-  --repository payflow-frontend \
-  --output table
 ```
 
----
-
-### 4. Criar ACI na Azure com os dois containers
+### Criar o container na Azure (ACI)
 
 ```bash
-# Recuperar credenciais do ACR
 ACR_SERVER="$ACR_NAME.azurecr.io"
 ACR_USERNAME=$(az acr credential show --name $ACR_NAME --query username -o tsv)
 ACR_PASSWORD=$(az acr credential show --name $ACR_NAME --query "passwords[0].value" -o tsv)
 
-# Criar Container Group com o frontend
 az container create \
   --resource-group $RESOURCE_GROUP \
   --name payflow-aci \
@@ -169,83 +218,36 @@ az container create \
   --ports 80 \
   --os-type Linux \
   --cpu 1 \
-  --memory 1.5 \
-  --environment-variables \
-    VITE_DB_HOST=db \
-    VITE_APP_ENV=production \
-    "VITE_APP_TITLE=PayFlow Dashboard"
+  --memory 1.5
 
-# Verificar status e obter FQDN público
+# Ver URL pública
 az container show \
   --resource-group $RESOURCE_GROUP \
   --name payflow-aci \
   --query "{Status:instanceView.state, URL:ipAddress.fqdn}" \
   --output table
-
-# Acompanhar logs do container em execução
-az container logs \
-  --resource-group $RESOURCE_GROUP \
-  --name payflow-aci \
-  --follow
 ```
 
----
-
-### 5. Deletar todos os recursos ao final
+### Remover todos os recursos
 
 ```bash
-# Opção 1: Deletar o Resource Group inteiro (remove ACR + ACI + tudo)
-az group delete \
-  --name $RESOURCE_GROUP \
-  --yes \
-  --no-wait
+# Remove o Resource Group e tudo dentro dele (ACR + ACI)
+az group delete --name $RESOURCE_GROUP --yes --no-wait
 
-# Confirmar que o grupo foi removido
-az group list --output table
-
-# Opção 2: Deletar recursos individualmente
-az container delete \
-  --resource-group $RESOURCE_GROUP \
-  --name payflow-aci \
-  --yes
-
-az acr delete \
-  --resource-group $RESOURCE_GROUP \
-  --name $ACR_NAME \
-  --yes
-
-az group delete \
-  --name $RESOURCE_GROUP \
-  --yes
-
-# Limpeza local: parar containers e remover imagens
+# Limpeza local
 docker compose down -v
 docker rmi $ACR_NAME.azurecr.io/payflow-frontend:latest
-docker system prune -f
 ```
 
 ---
 
-## Variáveis de Ambiente
+## Stack
 
-| Variável           | Descrição                                      | Exemplo             |
-|--------------------|------------------------------------------------|---------------------|
-| `POSTGRES_USER`    | Usuário do banco PostgreSQL                    | `payflow`           |
-| `POSTGRES_PASSWORD`| Senha do banco PostgreSQL                      | `payflow@2024`      |
-| `POSTGRES_DB`      | Nome do banco de dados                         | `payflow_db`        |
-| `VITE_DB_HOST`     | Host do banco (injetado no build do React)     | `db`                |
-| `VITE_APP_ENV`     | Ambiente da aplicação (build arg)              | `production`        |
-| `VITE_APP_TITLE`   | Título exibido na dashboard (build arg)        | `PayFlow Dashboard` |
-
----
-
-## Tecnologias
-
-| Camada     | Tecnologia            | Versão       |
-|------------|-----------------------|--------------|
-| Frontend   | React + Vite          | 18 / 5       |
-| Servidor   | nginx                 | alpine       |
-| Banco      | PostgreSQL            | 15-alpine    |
-| Build      | Node.js               | 20-alpine    |
-| Orquestração | Docker Compose      | v2           |
-| Cloud      | Azure ACI + ACR       | —            |
+| Camada | Tecnologia | Versão |
+|---|---|---|
+| Frontend | React + Vite | 18 / 5 |
+| Servidor web | nginx | alpine |
+| Banco de dados | PostgreSQL | 15-alpine |
+| Runtime de build | Node.js | 20-alpine |
+| Orquestração | Docker Compose | v2 |
+| Cloud | Azure ACI + ACR | — |
