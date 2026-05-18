@@ -1,0 +1,17 @@
+export const transactions = [
+  { id: 1,  customer: 'Ana Silva',       amount: 1250.00, status: 'Aprovado',  method: 'Cartão', date: '18/05/2024 09:23' },
+  { id: 2,  customer: 'Bruno Costa',     amount:   89.90, status: 'Aprovado',  method: 'Pix',    date: '18/05/2024 09:45' },
+  { id: 3,  customer: 'Carla Mendes',    amount: 3400.00, status: 'Recusado',  method: 'Cartão', date: '18/05/2024 10:12' },
+  { id: 4,  customer: 'Diego Rocha',     amount:  156.50, status: 'Pendente',  method: 'Boleto', date: '18/05/2024 10:30' },
+  { id: 5,  customer: 'Elena Farias',    amount: 2100.00, status: 'Aprovado',  method: 'Cartão', date: '18/05/2024 11:05' },
+  { id: 6,  customer: 'Felipe Lima',     amount:   45.00, status: 'Aprovado',  method: 'Pix',    date: '18/05/2024 11:22' },
+  { id: 7,  customer: 'Gabriela Nunes',  amount:  899.99, status: 'Aprovado',  method: 'Cartão', date: '18/05/2024 11:48' },
+  { id: 8,  customer: 'Hugo Batista',    amount:  320.00, status: 'Recusado',  method: 'Cartão', date: '18/05/2024 12:10' },
+  { id: 9,  customer: 'Isabela Cruz',    amount:   75.00, status: 'Aprovado',  method: 'Pix',    date: '18/05/2024 12:35' },
+  { id: 10, customer: 'João Ferreira',   amount: 1800.00, status: 'Pendente',  method: 'Boleto', date: '18/05/2024 13:00' },
+  { id: 11, customer: 'Karen Oliveira',  amount:  550.00, status: 'Aprovado',  method: 'Pix',    date: '18/05/2024 13:20' },
+  { id: 12, customer: 'Lucas Alves',     amount: 4200.00, status: 'Aprovado',  method: 'Cartão', date: '18/05/2024 13:45' },
+  { id: 13, customer: 'Marina Santos',   amount:  230.00, status: 'Recusado',  method: 'Boleto', date: '18/05/2024 14:10' },
+  { id: 14, customer: 'Nicolas Pereira', amount:  680.00, status: 'Aprovado',  method: 'Cartão', date: '18/05/2024 14:30' },
+  { id: 15, customer: 'Olivia Martins',  amount:  120.00, status: 'Aprovado',  method: 'Pix',    date: '18/05/2024 14:55' },
+]
